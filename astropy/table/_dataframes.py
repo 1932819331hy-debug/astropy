@@ -8,7 +8,6 @@ library.
 
 from __future__ import annotations
 
-import math
 import warnings
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, NewType
@@ -386,9 +385,12 @@ def from_df(
         elif isinstance(dtype, (nw.String, nw.Binary, nw.Object)):
             if data.dtype.kind == "O":
                 ts = (str, bytes)
-                # If all elements of an object array are string-like or None or np.nan
-                # then coerce back to a native numpy str/unicode array.
-                if all((x is None) or isinstance(x, ts) or math.isnan(x) for x in data):
+                # Use the backend's null mask rather than testing values with
+                # math.isnan, which raises for pandas.NA and other objects.
+                if all(
+                    missing or isinstance(value, ts)
+                    for value, missing in zip(data, nw_mask.to_numpy())
+                ):
                     # Force any missing (null) values to b''.  Numpy will
                     # upcast to str/unicode as needed. We go via a list to
                     # avoid replacing objects in a view of the pandas array and
@@ -526,11 +528,13 @@ def from_pandas(
             continue
 
         if data.dtype.kind == "O":
-            # If all elements of an object array are string-like or np.nan
-            # then coerce back to a native numpy str/unicode array.
+            # Check missing values using the existing pandas null mask so
+            # pandas.NA and None are treated like np.nan.
             string_types = (str, bytes)
-            nan = np.nan
-            if all(isinstance(x, string_types) or x is nan for x in data):
+            if all(
+                missing or isinstance(value, string_types)
+                for value, missing in zip(data, mask)
+            ):
                 # Force any missing (null) values to b''.  Numpy will
                 # upcast to str/unicode as needed. We go via a list to
                 # avoid replacing objects in a view of the pandas array and
