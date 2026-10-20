@@ -711,6 +711,53 @@ class TestDataFrameConversion:
         assert nulls_first_two.all()
 
 
+@pytest.mark.skipif(not HAS_PANDAS, reason="requires pandas")
+@pytest.mark.parametrize("method", ["from_df", "from_pandas"])
+@pytest.mark.parametrize(
+    "dtype",
+    [
+        "object",
+        "string",
+        pytest.param(
+            "string[pyarrow]",
+            marks=pytest.mark.skipif(not HAS_PYARROW, reason="requires pyarrow"),
+        ),
+    ],
+)
+@pytest.mark.parametrize("missing_value", [None, np.nan, "pd.NA"])
+def test_pandas_missing_string_values(method, dtype, missing_value):
+    """Masked string columns accept pandas.NA, None, and NaN (gh-20663)."""
+    import pandas as pd
+
+    if method == "from_df" and not HAS_NARWHALS:
+        pytest.skip("requires narwhals")
+
+    if missing_value == "pd.NA":
+        missing_value = pd.NA
+    df = pd.DataFrame({"s": ["a", missing_value]}, dtype=dtype)
+
+    result = getattr(Table, method)(df)
+    assert result["s"].dtype.kind == "U"
+    assert result["s"][0] == "a"
+    assert_array_equal(result["s"].mask, [False, True])
+
+
+@pytest.mark.skipif(
+    not HAS_PANDAS or not HAS_NARWHALS,
+    reason="requires pandas and narwhals",
+)
+@pytest.mark.parametrize("method", ["from_df", "from_pandas"])
+def test_pandas_mixed_object_values_remain_objects(method):
+    """Do not coerce non-string objects to strings when a null is present."""
+    import pandas as pd
+
+    df = pd.DataFrame({"s": ["a", 123, pd.NA]}, dtype=object)
+    result = getattr(Table, method)(df)
+    assert result["s"].dtype.kind == "O"
+    assert result["s"][1] == 123
+    assert_array_equal(result["s"].mask, [False, False, True])
+
+
 @pytest.mark.skipif(
     not HAS_PANDAS or not HAS_NARWHALS,
     reason="requires pandas and narwhals",
