@@ -1,0 +1,1 @@
+Fixed ``Table.from_df`` and ``Table.from_pandas`` converting nullable pandas string columns containing ``pd.NA``.
